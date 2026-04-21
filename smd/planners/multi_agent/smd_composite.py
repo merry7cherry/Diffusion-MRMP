@@ -159,7 +159,8 @@ class SMDComposite:
         ########
         # Normalize start and goal positions.
         self.hard_conds = self.dataset.get_hard_conditions(torch.vstack((self.start_state_pos, self.goal_state_pos)), normalize=True)
-        self.context = None
+        task_tensor = torch.cat((self.start_state_pos, self.goal_state_pos), dim=-1).reshape(1, -1)
+        self.context = self.dataset.normalize_tasks(task_tensor)
 
         ########
         # Set up the planning costs.

@@ -47,6 +47,10 @@ def train_from_config(config_path: str | Path) -> Path:
     )
 
     dataset = train_subset.dataset
+    task_dim = int(dataset.fields[f"{dataset.field_key_task}_normalized"].shape[-1])
+    configured_context_dim = int(model_cfg.get("context_dim", task_dim))
+    if configured_context_dim <= 0:
+        configured_context_dim = task_dim
     model = get_model(
         model_class=str(model_cfg.get("model_class", "TrajectoryDFMModel")),
         tensor_args=tensor_args,
@@ -54,14 +58,26 @@ def train_from_config(config_path: str | Path) -> Path:
         velocity_model_class=str(model_cfg.get("velocity_model_class", "TrajectoryVelocityMLP")),
         hidden_dim=int(model_cfg.get("hidden_dim", 128)),
         n_hidden_layers=int(model_cfg.get("n_hidden_layers", 2)),
-        context_dim=int(model_cfg.get("context_dim", 0)),
+        context_dim=configured_context_dim,
         n_sampling_steps=int(model_cfg.get("n_sampling_steps", 16)),
         sigma_data=float(model_cfg.get("sigma_data", 1.0)),
         sigma_noise=float(model_cfg.get("sigma_noise", 1.0)),
+        groups_per_batch=int(model_cfg.get("groups_per_batch", 4)),
+        P_mean_t=float(model_cfg.get("P_mean_t", -1.0)),
+        P_std_t=float(model_cfg.get("P_std_t", 2.5)),
+        P_mean_r=float(model_cfg.get("P_mean_r", 1.0)),
+        P_std_r=float(model_cfg.get("P_std_r", 2.5)),
+        kernel_temp_pos=float(model_cfg.get("kernel_temp_pos", 1.0)),
+        kernel_temp_neg=float(model_cfg.get("kernel_temp_neg", 1.0)),
+        sinkhorn_iters=int(model_cfg.get("sinkhorn_iters", 20)),
+        norm_eps=float(model_cfg.get("norm_eps", 1e-4)),
+        norm_p=float(model_cfg.get("norm_p", 0.0)),
     )
 
     args_payload = {
         "generator_backend": "dfm",
+        "dfm_variant": "split_v0",
+        "conditioning_mode": "task",
         "model_class": str(model_cfg.get("model_class", "TrajectoryDFMModel")),
         "velocity_model_class": str(model_cfg.get("velocity_model_class", "TrajectoryVelocityMLP")),
         "dataset_class": str(dataset_cfg.get("dataset_class", "TrajectoryDataset")),
@@ -74,9 +90,20 @@ def train_from_config(config_path: str | Path) -> Path:
         "n_sampling_steps": int(model_cfg.get("n_sampling_steps", 16)),
         "hidden_dim": int(model_cfg.get("hidden_dim", 128)),
         "n_hidden_layers": int(model_cfg.get("n_hidden_layers", 2)),
-        "context_dim": int(model_cfg.get("context_dim", 0)),
+        "context_dim": configured_context_dim,
+        "task_dim": task_dim,
         "sigma_data": float(model_cfg.get("sigma_data", 1.0)),
         "sigma_noise": float(model_cfg.get("sigma_noise", 1.0)),
+        "groups_per_batch": int(model_cfg.get("groups_per_batch", 4)),
+        "P_mean_t": float(model_cfg.get("P_mean_t", -1.0)),
+        "P_std_t": float(model_cfg.get("P_std_t", 2.5)),
+        "P_mean_r": float(model_cfg.get("P_mean_r", 1.0)),
+        "P_std_r": float(model_cfg.get("P_std_r", 2.5)),
+        "kernel_temp_pos": float(model_cfg.get("kernel_temp_pos", 1.0)),
+        "kernel_temp_neg": float(model_cfg.get("kernel_temp_neg", 1.0)),
+        "sinkhorn_iters": int(model_cfg.get("sinkhorn_iters", 20)),
+        "norm_eps": float(model_cfg.get("norm_eps", 1e-4)),
+        "norm_p": float(model_cfg.get("norm_p", 0.0)),
         "use_ema": bool(training_cfg.get("use_ema", False)),
         "ema_decay": float(training_cfg.get("ema_decay", 0.995)),
     }

@@ -44,6 +44,16 @@ def load_dfm_model_from_model_dir(model_dir: str | os.PathLike[str], *, tensor_a
         n_sampling_steps=int(args.get("n_sampling_steps", 16)),
         sigma_data=float(args.get("sigma_data", 1.0)),
         sigma_noise=float(args.get("sigma_noise", 1.0)),
+        groups_per_batch=int(args.get("groups_per_batch", 4)),
+        P_mean_t=float(args.get("P_mean_t", -1.0)),
+        P_std_t=float(args.get("P_std_t", 2.5)),
+        P_mean_r=float(args.get("P_mean_r", 1.0)),
+        P_std_r=float(args.get("P_std_r", 2.5)),
+        kernel_temp_pos=float(args.get("kernel_temp_pos", 1.0)),
+        kernel_temp_neg=float(args.get("kernel_temp_neg", 1.0)),
+        sinkhorn_iters=int(args.get("sinkhorn_iters", 20)),
+        norm_eps=float(args.get("norm_eps", 1e-4)),
+        norm_p=float(args.get("norm_p", 0.0)),
     )
     checkpoint_path = resolve_model_checkpoint(model_dir)
     model.load_state_dict(torch.load(checkpoint_path, map_location=tensor_args["device"]))

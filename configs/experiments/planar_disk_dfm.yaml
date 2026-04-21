@@ -13,9 +13,19 @@ model:
   n_sampling_steps: 16
   hidden_dim: 128
   n_hidden_layers: 2
-  context_dim: 0
+  context_dim: 12
   sigma_data: 1.0
   sigma_noise: 1.0
+  groups_per_batch: 4
+  P_mean_t: -1.0
+  P_std_t: 2.5
+  P_mean_r: 1.0
+  P_std_r: 2.5
+  kernel_temp_pos: 1.0
+  kernel_temp_neg: 1.0
+  sinkhorn_iters: 20
+  norm_eps: 0.0001
+  norm_p: 0.0
 training:
   device: cuda
   epochs: 10

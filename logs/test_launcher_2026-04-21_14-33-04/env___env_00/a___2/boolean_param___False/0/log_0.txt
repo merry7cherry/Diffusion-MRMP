@@ -1,0 +1,2 @@
+Some logs in a log file.
+Running experiment with seed 0, env env_00, env_param aa, a 2, boolean_param False, some_default_param b

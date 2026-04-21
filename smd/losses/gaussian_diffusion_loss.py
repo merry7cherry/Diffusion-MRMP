@@ -19,6 +19,8 @@ class GaussianDiffusionLoss:
         traj_normalized = input_dict[f'{dataset.field_key_traj}_normalized']
 
         context = build_context(diffusion_model, dataset, input_dict)
+        if getattr(diffusion_model, "expects_task_tensor_context", False):
+            context = input_dict[f'{dataset.field_key_task}_normalized']
 
         hard_conds = input_dict.get('hard_conds', {})
         loss, info = diffusion_model.loss(traj_normalized, context, hard_conds)

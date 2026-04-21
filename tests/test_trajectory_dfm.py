@@ -10,12 +10,141 @@ class _ZeroVelocity(torch.nn.Module):
         return torch.zeros_like(x)
 
 
+class _ContextRecordingVelocity(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_context = None
+
+    def forward(self, x, t, h, context=None):  # noqa: D401
+        self.last_context = None if context is None else context.detach().clone()
+        return torch.zeros_like(x)
+
+
+class _OutputRecordingVelocity(torch.nn.Module):
+    def __init__(self, value: float) -> None:
+        super().__init__()
+        self.value = float(value)
+        self.last_output = None
+
+    def forward(self, x, t, h, context=None):  # noqa: D401
+        del t, h, context
+        self.last_output = torch.full_like(x, self.value)
+        return self.last_output
+
+
+def test_sample_grouped_timesteps_share_values_within_group() -> None:
+    from smd.models.trajectory_dfm import sample_grouped_timesteps
+
+    t, r = sample_grouped_timesteps(
+        batch_size=8,
+        groups_per_batch=4,
+        device=torch.device("cpu"),
+        dtype=torch.float32,
+        P_mean_t=-1.0,
+        P_std_t=2.5,
+        P_mean_r=1.0,
+        P_std_r=2.5,
+    )
+
+    assert t.shape == (8, 1)
+    assert r.shape == (8, 1)
+    assert torch.all(t <= r)
+    assert torch.allclose(t[0:2], t[0:1].expand_as(t[0:2]))
+    assert torch.allclose(t[2:4], t[2:3].expand_as(t[2:4]))
+    assert torch.allclose(r[4:6], r[4:5].expand_as(r[4:6]))
+    assert torch.allclose(r[6:8], r[6:7].expand_as(r[6:8]))
+
+
+def test_compute_split_v0_drift_is_finite_and_shape_stable() -> None:
+    from smd.models.trajectory_dfm import compute_split_v0_drift
+
+    gen = torch.tensor(
+        [
+            [[0.0, 0.0], [1.0, 1.0]],
+            [[0.5, -0.5], [1.5, 0.5]],
+        ],
+        dtype=torch.float32,
+    )
+    pos = gen + 2.0
+
+    drift = compute_split_v0_drift(
+        gen,
+        pos,
+        kernel_temp_pos=1.0,
+        kernel_temp_neg=1.0,
+        num_sinkhorn_iters=8,
+    )
+
+    assert drift.shape == gen.shape
+    assert torch.isfinite(drift).all()
+
+
+def test_gaussian_diffusion_loss_passes_task_tensor_context_to_dfm_model() -> None:
+    from smd.losses.gaussian_diffusion_loss import GaussianDiffusionLoss
+    from smd.models.trajectory_dfm import TrajectoryDFMModel
+
+    velocity = _ContextRecordingVelocity()
+    model = TrajectoryDFMModel(
+        velocity_model=velocity,
+        n_sampling_steps=4,
+        context_dim=4,
+        groups_per_batch=2,
+    )
+
+    class DatasetStub:
+        field_key_traj = "traj"
+        field_key_task = "task"
+
+    input_dict = {
+        "traj_normalized": torch.randn(2, 5, 2),
+        "task_normalized": torch.tensor(
+            [
+                [0.0, 1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0, 7.0],
+            ],
+            dtype=torch.float32,
+        ),
+        "hard_conds": {
+            0: torch.zeros(2, 2),
+            4: torch.ones(2, 2),
+        },
+    }
+
+    GaussianDiffusionLoss.loss_fn(model, input_dict, DatasetStub())
+
+    assert velocity.last_context is not None
+    assert torch.allclose(velocity.last_context, input_dict["task_normalized"])
+
+
+def test_trajectory_dfm_loss_does_not_clamp_velocity_tensor_at_endpoints() -> None:
+    from smd.models.trajectory_dfm import TrajectoryDFMModel
+
+    velocity = _OutputRecordingVelocity(7.0)
+    model = TrajectoryDFMModel(
+        velocity_model=velocity,
+        n_sampling_steps=4,
+    )
+
+    x = torch.randn(4, 6, 2)
+    hard_conds = {
+        0: torch.zeros(4, 2),
+        5: torch.ones(4, 2),
+    }
+
+    model.loss(x, context=None, hard_conds=hard_conds)
+
+    assert velocity.last_output is not None
+    assert torch.allclose(velocity.last_output[:, 0, :], torch.full((4, 2), 7.0))
+    assert torch.allclose(velocity.last_output[:, -1, :], torch.full((4, 2), 7.0))
+
+
 def test_trajectory_dfm_loss_returns_scalar_and_metrics() -> None:
     from smd.models.trajectory_dfm import TrajectoryDFMModel
 
     model = TrajectoryDFMModel(
         velocity_model=_ZeroVelocity(),
         n_sampling_steps=4,
+        groups_per_batch=3,
     )
 
     x = torch.randn(3, 6, 2)

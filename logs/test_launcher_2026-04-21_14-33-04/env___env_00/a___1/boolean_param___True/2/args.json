@@ -1,0 +1,13 @@
+{
+  "env": "env_00",
+  "env_param": "aa",
+  "a": 1,
+  "boolean_param": true,
+  "some_default_param": "b",
+  "debug": false,
+  "seed": 2,
+  "results_dir": "./logs/test_launcher_2026-04-21_14-33-04/env___env_00/a___1/boolean_param___True/2",
+  "integer_arg": 10,
+  "git_hash": "19353438d8958c500d06a1970d6ddf50b6fd01c0",
+  "git_url": "https://github.com/merry7cherry/Diffusion-MRMP.git"
+}
