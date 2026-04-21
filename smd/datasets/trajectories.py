@@ -4,11 +4,11 @@ From https://github.com/jacarvalho/mpd-public
 import abc
 import os.path
 
-import git
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from smd.runtime import runtime_from_env
 from smd.datasets.normalization import DatasetNormalizer
 from smd.utils.loading import load_params_from_yaml
 from torch_robotics import environments, robots
@@ -16,8 +16,9 @@ from torch_robotics.environments.env_base import EnvBase
 from torch_robotics.tasks.tasks import PlanningTask
 from torch_robotics.visualizers.planning_visualizer import PlanningVisualizer
 
-repo = git.Repo('.', search_parent_directories=True)
-dataset_base_dir = os.path.join(repo.working_dir, 'data_trajectories')
+
+def _dataset_base_dir() -> str:
+    return str(runtime_from_env().trajectories_root)
 
 
 class TrajectoryDatasetBase(Dataset, abc.ABC):
@@ -34,7 +35,7 @@ class TrajectoryDatasetBase(Dataset, abc.ABC):
         self.tensor_args = tensor_args
 
         self.dataset_subdir = dataset_subdir
-        self.base_dir = os.path.join(dataset_base_dir, self.dataset_subdir)
+        self.base_dir = os.path.join(_dataset_base_dir(), self.dataset_subdir)
         # Get the args and metadata file from the '0' directory of this dataset. This includes obstacles.
         self.args = load_params_from_yaml(os.path.join(self.base_dir, '0', 'args.yaml'))
         self.metadata = load_params_from_yaml(os.path.join(self.base_dir, '0', 'metadata.yaml'))

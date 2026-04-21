@@ -22,7 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from smd.common.experiments.experiment_utils import *
-from inference_multi_agent import run_multi_agent_trial
+
+try:
+    from scripts.inference.inference_multi_agent import run_multi_agent_trial
+except ModuleNotFoundError:
+    from inference_multi_agent import run_multi_agent_trial
 
 
 def run_multi_agent_experiment(experiment_config: MultiAgentPlanningExperimentConfig):

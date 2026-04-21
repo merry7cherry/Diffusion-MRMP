@@ -4,7 +4,11 @@ From https://github.com/jacarvalho/mpd-public
 import os
 import os.path as osp
 
-data_directory = os.path.abspath(os.path.dirname(__file__ + '/../../../../'))
+from smd.runtime import runtime_from_env
+
+
+def _data_directory() -> str:
+    return str(runtime_from_env().data_root)
 
 
 # def makedirs(dirname):
@@ -17,8 +21,9 @@ def makedirs(dirname):
 
 def get_pebm_src():
     # directory = os.environ['PEBM_DATA_DIR']
-    makedirs(data_directory)
-    return data_directory
+    directory = _data_directory()
+    makedirs(directory)
+    return directory
 
 
 def get_pebm_data_dir():

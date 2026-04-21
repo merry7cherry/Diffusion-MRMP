@@ -28,10 +28,15 @@ import torch
 
 # Project imports.
 from smd.config.smd_params import SMDParams as params
+from smd.runtime import runtime_from_env
 from smd.common.multi_agent_utils import *
 from torch_robotics.environments import *
 from torch_robotics.environments.env_highways_2d import EnvHighways2D
 import pickle
+
+
+def _instances_file(map_name: str) -> str:
+    return str(runtime_from_env().instances_root / f"{map_name}.pkl")
 
 
 def get_planning_problem(planning_problem_class_name: str,
@@ -383,7 +388,7 @@ class EnvEmptyNoWait2DRobotCompositeTwoPlanarDiskRandom(SMDPlanningProblemConfig
     def get_planning_problem(self, num_agents, instance_idx, map_name):
         assert num_agents == 2
 
-        file_name = '../../instances_data/'+map_name+'.pkl'
+        file_name = _instances_file(map_name)
         with open(file_name, 'rb') as f:
             loaded_set = pickle.load(f)
         # if num_agents == 3, then idx = 0, if num_agents == 6, then idx = 1, if num_agents == 9, then idx = 2
@@ -420,7 +425,7 @@ class EnvEmptyNoWait2DRobotCompositeThreePlanarDiskRandom(SMDPlanningProblemConf
     def get_planning_problem(self, num_agents, instance_idx, map_name):
         assert num_agents == 3
 
-        file_name = '../../instances_data/'+map_name+'.pkl'
+        file_name = _instances_file(map_name)
         with open(file_name, 'rb') as f:
             loaded_set = pickle.load(f)
         # if num_agents == 3, then idx = 0, if num_agents == 6, then idx = 1, if num_agents == 9, then idx = 2
@@ -457,7 +462,7 @@ class EnvEmptyNoWait2DRobotCompositeSixPlanarDiskRandom(SMDPlanningProblemConfig
     def get_planning_problem(self, num_agents, instance_idx, map_name):
         assert num_agents == 6
 
-        file_name = '../../instances_data/'+map_name+'.pkl'
+        file_name = _instances_file(map_name)
         with open(file_name, 'rb') as f:
             loaded_set = pickle.load(f)
         if num_agents == 3 or num_agents == 2:
@@ -493,7 +498,7 @@ class EnvEmptyNoWait2DRobotCompositeNinePlanarDiskRandom(SMDPlanningProblemConfi
     def get_planning_problem(self, num_agents, instance_idx, map_name):
         assert num_agents == 9
 
-        file_name = '../../instances_data/'+map_name+'.pkl'
+        file_name = _instances_file(map_name)
         with open(file_name, 'rb') as f:
             loaded_set = pickle.load(f)
         if num_agents == 3 or num_agents == 2:

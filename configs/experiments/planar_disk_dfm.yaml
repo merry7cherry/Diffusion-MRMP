@@ -1,0 +1,34 @@
+runtime:
+  project_name: Diffusion-MRMP
+dataset:
+  dataset_class: TrajectoryDataset
+  dataset_subdir: EnvEmptyNoWait2D-RobotCompositeThreePlanarDisk
+  batch_size: 32
+  val_set_size: 0.05
+  use_extra_objects: true
+  obstacle_cutoff_margin: 0.01
+model:
+  model_class: TrajectoryDFMModel
+  velocity_model_class: TrajectoryVelocityMLP
+  n_sampling_steps: 16
+  hidden_dim: 128
+  n_hidden_layers: 2
+  context_dim: 0
+  sigma_data: 1.0
+  sigma_noise: 1.0
+training:
+  device: cuda
+  epochs: 10
+  lr: 0.0001
+  steps_til_summary: 100
+  steps_til_checkpoint: 100
+  clip_grad: true
+  clip_grad_max_norm: 1.0
+  use_ema: false
+  ema_decay: 0.995
+  update_ema_every: 10
+  use_amp: false
+  debug: false
+  wandb_mode: disabled
+output:
+  model_id: planar_disk_dfm_default

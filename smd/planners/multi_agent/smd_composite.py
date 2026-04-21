@@ -32,21 +32,18 @@ from smd.common.experiments import TrialSuccessStatus
 from smd.common.constraints import MultiPointConstraint
 from smd.common.multi_agent_utils import *
 from mp_baselines.planners.costs.cost_functions import CostCollision, CostComposite, CostGPTrajectory
-from smd.models import TemporalUnet, UNET_DIM_MULTS
+from smd.models.model_io import load_dfm_model_from_model_dir, load_dfm_training_args
 from smd.models.diffusion_models.guides import GuideManagerTrajectoriesWithVelocity
-from smd.models.diffusion_models.sample_functions import guide_gradient_steps, ddpm_sample_fn
-from smd.trainer import get_dataset, get_model
-from smd.utils.loading import load_params_from_yaml
+from smd.trainer import get_dataset
+from smd.runtime import runtime_from_env
 from torch_robotics.robots import *
 from torch_robotics.torch_utils.seed import fix_random_seed
 from torch_robotics.torch_utils.torch_timer import TimerCUDA
-from torch_robotics.torch_utils.torch_utils import get_torch_device, freeze_torch_model_params
+from torch_robotics.torch_utils.torch_utils import get_torch_device
 from torch_robotics.trajectory.metrics import compute_smoothness, compute_path_length, compute_variance_waypoints
 from torch_robotics.visualizers.planning_visualizer import PlanningVisualizer, create_fig_and_axes
 
 allow_ops_in_compiled_graph()
-
-TRAINED_MODELS_DIR = '../../data_trained_models/'
 
 
 class SMDComposite:
@@ -112,11 +109,11 @@ class SMDComposite:
             raise NotImplementedError
 
         ####################################
-        model_dir = os.path.join(TRAINED_MODELS_DIR, self.model_id)
+        model_dir = str(runtime_from_env().trained_models_root / self.model_id)
         results_dir = os.path.join(model_dir, 'results_inference', str(seed))
         os.makedirs(results_dir, exist_ok=True)
 
-        args = load_params_from_yaml(os.path.join(model_dir, "args.yaml"))
+        args = load_dfm_training_args(model_dir)
 
         ####################################
         # Load dataset with env, robot, and task.   
@@ -146,34 +143,7 @@ class SMDComposite:
 
         ####################################
         # Load prior model
-        diffusion_configs = dict(
-            variance_schedule=args['variance_schedule'],
-            n_diffusion_steps=args['n_diffusion_steps'],
-            predict_epsilon=args['predict_epsilon'],
-        )
-        unet_configs = dict(
-            state_dim=self.dataset.state_dim,
-            n_support_points=self.dataset.n_support_points,
-            unet_input_dim=args['unet_input_dim'],
-            dim_mults=UNET_DIM_MULTS[args['unet_dim_mults_option']],
-        )
-        diffusion_model = get_model(
-            model_class=args['diffusion_model_class'],
-            model=TemporalUnet(**unet_configs),
-            tensor_args=tensor_args,
-            **diffusion_configs,
-            **unet_configs
-        )
-        diffusion_model.load_state_dict(
-            torch.load(os.path.join(model_dir, 'checkpoints', 'ema_model_current_state_dict.pth' if args[
-                'use_ema'] else 'model_current_state_dict.pth'),
-                       map_location=tensor_args['device'])
-        )
-        diffusion_model.eval()
-        self.model = diffusion_model
-
-        freeze_torch_model_params(self.model)
-        self.model = torch.compile(self.model)
+        self.model = load_dfm_model_from_model_dir(model_dir, tensor_args=tensor_args)
         self.model.warmup(horizon=self.n_support_points, device=device)
 
         ####################################
@@ -240,12 +210,10 @@ class SMDComposite:
             tensor_args=tensor_args,
         )
 
-        self.t_start_guide = ceil(start_guide_steps_fraction * self.model.n_diffusion_steps)
+        self.t_start_guide = ceil(start_guide_steps_fraction * self.model.n_sampling_steps)
         self.sample_fn_kwargs = dict(
             guide=None if self.run_prior_then_guidance or run_prior_only else self.guide,
             n_guide_steps=self.n_guide_steps,
-            t_start_guide=self.t_start_guide,
-            noise_std_extra_schedule_fn=lambda x: 0.5,
         )
 
     def render_paths(self, paths_l: List[torch.Tensor], constraints_l: List[MultiPointConstraint] = None,
@@ -300,19 +268,16 @@ class SMDComposite:
              ):
 
         ########
-        # Sample trajectories with the diffusion/cvae model
+        # Sample trajectories with the DFM generator
         with TimerCUDA() as timer_model_sampling:
             trajs_normalized_iters = self.model.run_inference(
                 self.context, self.hard_conds,
                 n_samples=self.n_samples, horizon=self.n_support_points,
                 return_chain=True,
-                sample_fn=ddpm_sample_fn,
                 **self.sample_fn_kwargs,
-                n_diffusion_steps_without_noise=self.n_diffusion_steps_without_noise,
                 dataset = self.dataset,
                 init_traj4proj = self.init_traj4proj,
                 proj_params = self.proj_params,
-                # ddim=True
             )
         print(f't_model_sampling: {timer_model_sampling.elapsed:.3f} sec')
         t_total = timer_model_sampling.elapsed
