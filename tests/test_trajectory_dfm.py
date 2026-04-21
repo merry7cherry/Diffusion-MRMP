@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import types
+
 import torch
 
 
@@ -88,3 +90,167 @@ def test_trajectory_dfm_run_local_inference_uses_seed_trajectory() -> None:
     assert chain.shape == (3, 2, 4, 2)
     assert torch.allclose(chain[:, :, 0, :], torch.zeros_like(chain[:, :, 0, :]))
     assert torch.allclose(chain[:, :, -1, :], torch.ones_like(chain[:, :, -1, :]))
+
+
+def test_trajectory_dataset_skips_instance_bound_env_for_training(monkeypatch, tmp_path) -> None:
+    from smd.datasets import trajectories as trajectories_module
+
+    class UnexpectedEnv:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("environment construction should be skipped without instance context")
+
+    class UnexpectedTask:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("planning task should be skipped without instance context")
+
+    class UnexpectedVisualizer:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("visualizer should be skipped without instance context")
+
+    class FakeRobot:
+        def __init__(self, tensor_args=None):
+            self.tensor_args = tensor_args
+
+        def get_position(self, x):
+            return x
+
+    def fake_load_params(path: str):
+        if path.endswith("metadata.yaml"):
+            return {
+                "env_id": "EnvEmptyNoWait2D",
+                "robot_id": "RobotCompositeThreePlanarDisk",
+            }
+        return {
+            "threshold_start_goal_pos": 1,
+        }
+
+    def fake_load_trajectories(self):
+        self.fields[self.field_key_traj] = torch.tensor(
+            [[[0.0, 0.0], [0.5, 0.5], [1.0, 1.0], [1.5, 1.5]]],
+            dtype=torch.float32,
+        )
+        self.fields[self.field_key_task] = torch.tensor(
+            [[0.0, 0.0, 1.5, 1.5]],
+            dtype=torch.float32,
+        )
+        self.map_task_id_to_trajectories_id[0] = torch.tensor([0])
+        self.map_trajectory_id_to_task_id[0] = 0
+
+    monkeypatch.setattr(trajectories_module, "_dataset_base_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(trajectories_module, "load_params_from_yaml", fake_load_params)
+    monkeypatch.setattr(
+        trajectories_module,
+        "environments",
+        types.SimpleNamespace(
+            EnvEmptyNoWait2DExtraObjects=UnexpectedEnv,
+            EnvEmptyNoWait2D=UnexpectedEnv,
+        ),
+    )
+    monkeypatch.setattr(
+        trajectories_module,
+        "robots",
+        types.SimpleNamespace(RobotCompositeThreePlanarDisk=FakeRobot),
+    )
+    monkeypatch.setattr(trajectories_module, "PlanningTask", UnexpectedTask)
+    monkeypatch.setattr(trajectories_module, "PlanningVisualizer", UnexpectedVisualizer)
+    monkeypatch.setattr(
+        trajectories_module.TrajectoryDatasetBase,
+        "load_trajectories",
+        fake_load_trajectories,
+    )
+
+    dataset = trajectories_module.TrajectoryDataset(
+        dataset_subdir="demo",
+        tensor_args={"device": "cpu"},
+    )
+
+    sample = dataset[0]
+
+    assert dataset.env is None
+    assert dataset.task is None
+    assert dataset.planner_visualizer is None
+    assert sample["traj_normalized"].shape == (4, 2)
+    assert 0 in sample["hard_conds"]
+    assert 3 in sample["hard_conds"]
+
+
+def test_merge_dataset_loader_kwargs_overrides_training_args() -> None:
+    from smd.trainer.train_loaders import merge_dataset_loader_kwargs
+
+    tensor_args = {"device": "cpu"}
+    merged = merge_dataset_loader_kwargs(
+        {
+            "dataset_class": "FromArgs",
+            "use_extra_objects": False,
+            "obstacle_cutoff_margin": 0.5,
+            "dataset_subdir": "demo-set",
+        },
+        dataset_class="TrajectoryDataset",
+        use_extra_objects=True,
+        obstacle_cutoff_margin=0.01,
+        tensor_args=tensor_args,
+        instance_idx=7,
+        map_name="instances_simple",
+    )
+
+    assert merged["dataset_class"] == "TrajectoryDataset"
+    assert merged["use_extra_objects"] is True
+    assert merged["obstacle_cutoff_margin"] == 0.01
+    assert merged["dataset_subdir"] == "demo-set"
+    assert merged["tensor_args"] is tensor_args
+    assert merged["instance_idx"] == 7
+    assert merged["map_name"] == "instances_simple"
+
+
+def test_planner_modules_import_dataset_loader_merge_helper() -> None:
+    import smd.planners.multi_agent.smd_composite as smd_composite_module
+    import smd.planners.single_agent.mpd as mpd_module
+    import smd.planners.single_agent.mpd_ensemble as mpd_ensemble_module
+
+    assert callable(smd_composite_module.merge_dataset_loader_kwargs)
+    assert callable(mpd_module.merge_dataset_loader_kwargs)
+    assert callable(mpd_ensemble_module.merge_dataset_loader_kwargs)
+
+
+def test_projection_layout_uses_position_only_multi_agent_state() -> None:
+    from smd.projection.projection import _resolve_projection_layout
+
+    class FakeRobot:
+        n_agents = 3
+
+    class FakeProjectionInfo:
+        robot = FakeRobot()
+
+    x = torch.zeros((1, 64, 6))
+    hard_conds = {
+        0: torch.zeros((1, 6)),
+        63: torch.ones((1, 6)),
+    }
+
+    start, goal, num_agents, horizons, traj_index = _resolve_projection_layout(
+        x,
+        FakeProjectionInfo(),
+        hard_conds,
+    )
+
+    assert start.shape == (6,)
+    assert goal.shape == (6,)
+    assert num_agents == 3
+    assert horizons == 64
+    assert traj_index.tolist() == list(range(64))
+
+
+def test_evaluate_collision_infers_num_agents_from_result_dir() -> None:
+    from pathlib import Path
+
+    import numpy as np
+
+    from smd.tasks.evaluate_collision import infer_num_agents
+
+    path_file = Path(
+        "/tmp/runs/inference/demo/instance_name___Example/num_agents___3/planner___SMDComposite/0/paths.npy"
+    )
+    map_info = {"map_name": "instances_simple", "instance_idx": 0}
+    paths_data = np.zeros((64, 64, 6), dtype=float)
+
+    assert infer_num_agents(path_file, map_info, paths_data) == 3

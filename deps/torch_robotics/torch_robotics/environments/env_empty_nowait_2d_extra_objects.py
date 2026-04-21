@@ -10,13 +10,14 @@ from torch_robotics.torch_utils.torch_utils import DEFAULT_TENSOR_ARGS
 from torch_robotics.visualizers.planning_visualizer import create_fig_and_axes
 
 import pickle
+from smd.runtime import runtime_from_env
 class EnvEmptyNoWait2DExtraObjects(EnvEmptyNoWait2D):
 
     def __init__(self, tensor_args=None, **kwargs):
         instance_idx = kwargs['instance_idx']
         map_name = kwargs['map_name']
 
-        file_name = '../../instances_data/'+map_name+'.pkl'
+        file_name = runtime_from_env().instances_root / f'{map_name}.pkl'
         with open(file_name, 'rb') as f:
             loaded_set = pickle.load(f)
 

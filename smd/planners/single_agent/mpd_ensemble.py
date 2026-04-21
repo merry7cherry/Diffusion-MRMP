@@ -34,11 +34,16 @@ from einops._torch_specific import allow_ops_in_compiled_graph  # requires einop
 from typing import Tuple, List, Dict
 
 from experiment_launcher import single_experiment_yaml, run_experiment
-from mp_baselines.planners.costs.cost_functions import CostCollision, CostComposite, CostGPTrajectory, CostConstraint
+from mp_baselines.planners.costs.cost_functions import (
+    CostCollision,
+    CostComposite,
+    CostConstraint,
+    CostGPTrajectoryPositionOnlyWrapper,
+)
 from smd.models import TemporalUnet, UNET_DIM_MULTS
 from smd.models.diffusion_models.guides import GuideManagerTrajectoriesWithVelocity
 from smd.models.diffusion_models.sample_functions import guide_gradient_steps, ddpm_sample_fn
-from smd.trainer import get_dataset, get_model
+from smd.trainer import get_dataset, get_model, merge_dataset_loader_kwargs
 from smd.utils.loading import load_params_from_yaml
 from torch_robotics.robots import *
 from torch_robotics.torch_utils.seed import fix_random_seed
@@ -58,8 +63,7 @@ from smd.models.diffusion_models.diffusion_ensemble import DiffusionsEnsemble
 from smd.common.experiences import PathExperience, PathBatchExperience
 from smd.common.constraints import MultiPointConstraint
 from smd.common.pretty_print import *
-
-TRAINED_MODELS_DIR = '../../data_trained_models/'
+from smd.runtime import runtime_from_env
 
 
 class SMDEnsemble(SingleAgentPlanner):
@@ -127,19 +131,21 @@ class SMDEnsemble(SingleAgentPlanner):
         datasets = []
         sample_kwargs = []
         contexts = None
+        trained_models_root = trained_models_dir or str(runtime_from_env().trained_models_root)
         for j, model_id in enumerate(model_ids):
-            model_dir = os.path.join(TRAINED_MODELS_DIR, model_id)
+            model_dir = os.path.join(trained_models_root, model_id)
             model_dirs.append(model_dir)
             args.append(load_params_from_yaml(os.path.join(model_dir, 'args.yaml')))
 
             ## Load dataset with env, robot, task ##
-            train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(
+            dataset_kwargs = merge_dataset_loader_kwargs(
+                args[-1],
                 dataset_class='TrajectoryDataset',
                 use_extra_objects=True,
                 obstacle_cutoff_margin=0.01,
-                **args[-1],
-                tensor_args=tensor_args
+                tensor_args=tensor_args,
             )
+            train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(**dataset_kwargs)
             dataset = train_subset.dataset
             datasets.append(dataset)
             n_support_points = dataset.n_support_points
@@ -206,8 +212,7 @@ class SMDEnsemble(SingleAgentPlanner):
 
             # Cost smoothness
             cost_smoothness_l = [
-                CostGPTrajectory(
-                    # CostGPTrajectoryPositionOnlyWrapper(
+                CostGPTrajectoryPositionOnlyWrapper(
                     robot, n_support_points, dt, sigma_gp=1.0,
                     tensor_args=tensor_args
                 )

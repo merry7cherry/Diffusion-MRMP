@@ -35,11 +35,17 @@ from einops._torch_specific import allow_ops_in_compiled_graph  # requires einop
 from typing import Tuple, List
 
 from experiment_launcher import single_experiment_yaml, run_experiment
-from mp_baselines.planners.costs.cost_functions import CostCollision, CostComposite, CostGPTrajectory, CostConstraint, CostMaxVelocity
+from mp_baselines.planners.costs.cost_functions import (
+    CostCollision,
+    CostComposite,
+    CostConstraint,
+    CostGPTrajectoryPositionOnlyWrapper,
+    CostMaxVelocity,
+)
 from smd.models import TemporalUnet, UNET_DIM_MULTS
 from smd.models.diffusion_models.guides import GuideManagerTrajectoriesWithVelocity
 from smd.models.diffusion_models.sample_functions import guide_gradient_steps, ddpm_sample_fn
-from smd.trainer import get_dataset, get_model
+from smd.trainer import get_dataset, get_model, merge_dataset_loader_kwargs
 from smd.utils.loading import load_params_from_yaml
 from torch_robotics.robots import *
 from torch_robotics.torch_utils.seed import fix_random_seed
@@ -121,13 +127,14 @@ class SMD(SingleAgentPlanner):
 
         ####################################
         # Load dataset with env, robot, task. The TrajectoryDataset type is used here.
-        train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(
+        dataset_kwargs = merge_dataset_loader_kwargs(
+            args,
             dataset_class='TrajectoryDataset',
             use_extra_objects=True,
             obstacle_cutoff_margin=0.05,
-            **args,
-            tensor_args=tensor_args
+            tensor_args=tensor_args,
         )
+        train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(**dataset_kwargs)
         # Extract objects from the dataset.
         dataset = train_subset.dataset
         # Number of support points in the trajectory.
@@ -232,7 +239,7 @@ class SMD(SingleAgentPlanner):
 
         # Cost smoothness
         cost_smoothness_l = [
-            CostGPTrajectory(
+            CostGPTrajectoryPositionOnlyWrapper(
                 robot, n_support_points, dt, sigma_gp=1.0,
                 tensor_args=tensor_args
             )

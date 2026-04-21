@@ -5,8 +5,11 @@ from pathlib import Path
 
 def test_official_runtime_files_do_not_use_legacy_relative_roots() -> None:
     files = [
+        Path("deps/torch_robotics/torch_robotics/environments/env_empty_nowait_2d_extra_objects.py"),
         Path("smd/datasets/trajectories.py"),
         Path("smd/config/smd_experiment_configs.py"),
+        Path("smd/config/smd_params.py"),
+        Path("smd/planners/single_agent/mpd_ensemble.py"),
         Path("scripts/inference/inference_multi_agent.py"),
         Path("scripts/inference/launch_smd_composite_experiment.py"),
         Path("is_collision.py"),

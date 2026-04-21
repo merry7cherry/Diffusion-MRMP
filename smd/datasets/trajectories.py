@@ -47,15 +47,30 @@ class TrajectoryDatasetBase(Dataset, abc.ABC):
         # Environment
         env_class = getattr(
             environments, self.metadata['env_id'] + 'ExtraObjects' if use_extra_objects else self.metadata['env_id'])
-        self.env = env_class(tensor_args=tensor_args,instance_idx = kwargs['instance_idx'], map_name = kwargs['map_name'])
+        instance_idx = kwargs.get('instance_idx')
+        map_name = kwargs.get('map_name')
+        has_instance_context = instance_idx is not None and map_name is not None
+        if use_extra_objects and not has_instance_context:
+            # Training over a trajectory corpus does not have a single planning instance to bind to.
+            # Planner/evaluation paths still pass instance context and build the full environment.
+            self.env = None
+        else:
+            env_kwargs = {}
+            if has_instance_context:
+                env_kwargs.update(instance_idx=instance_idx, map_name=map_name)
+            self.env = env_class(tensor_args=tensor_args, **env_kwargs)
 
         # Robot
         robot_class = getattr(robots, self.metadata['robot_id'])
         self.robot = robot_class(tensor_args=tensor_args)
 
         # Task
-        self.task = PlanningTask(env=self.env, robot=self.robot, tensor_args=tensor_args, **self.args)
-        self.planner_visualizer = PlanningVisualizer(task=self.task)
+        if self.env is None:
+            self.task = None
+            self.planner_visualizer = None
+        else:
+            self.task = PlanningTask(env=self.env, robot=self.robot, tensor_args=tensor_args, **self.args)
+            self.planner_visualizer = PlanningVisualizer(task=self.task)
 
         # -------------------------------- Load trajectories ---------------------------------
         self.threshold_start_goal_pos = self.args['threshold_start_goal_pos']
@@ -120,6 +135,8 @@ class TrajectoryDatasetBase(Dataset, abc.ABC):
                render_joint_trajectories=False,
                render_robot_trajectories=False,
                **kwargs):
+        if self.planner_visualizer is None:
+            raise RuntimeError('render() requires dataset instance context (instance_idx and map_name).')
         # -------------------------------- Visualize ---------------------------------
         idxs = self.map_task_id_to_trajectories_id[task_id]
         pos_trajs = self.robot.get_position(self.fields[self.field_key_traj][idxs])

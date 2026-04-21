@@ -83,7 +83,7 @@ def expand_runtime_path(
 ) -> Path:
     raw = Path(os.path.expandvars(str(value).format(**runtime.as_placeholders()))).expanduser()
     if raw.is_absolute():
-        return raw.resolve()
+        return raw
     if source_path is None:
         return raw.resolve()
     source = Path(source_path)

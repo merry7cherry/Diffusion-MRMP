@@ -223,17 +223,24 @@ def cal_dummy_var(agent_rads, obs_pos, obs_rads, p_value):
     return d_o, d_a
 
 
+def _resolve_projection_layout(x, projection_info, hard_conds):
+    goal_idx = max(hard_conds.keys())
+    agents_starts_states_normalized = hard_conds[0][0, :]
+    agents_goals_states_normalized = hard_conds[goal_idx][0, :]
+    num_agents = int(getattr(projection_info.robot, "n_agents", agents_starts_states_normalized.shape[0] // 2))
+    horizons = x.shape[1]
+    traj_index = np.arange(horizons)
+    return agents_starts_states_normalized, agents_goals_states_normalized, num_agents, horizons, traj_index
+
+
 def apply_projection_alm(x, projection_info, hard_conds, first_projection, init_traj4proj, proj_params):
     # rebuttal
     grad_nu_o_set = []
     grad_nu_a_set = []
 
-    # Get hard conditions from projection_info
-    agents_starts_states_normalized = hard_conds[0][0,:]
-    agents_goals_states_normalized = hard_conds[63][0,:]
-
-    # get the number of the agents
-    num_agents = int(agents_starts_states_normalized.shape[0]/4)
+    agents_starts_states_normalized, agents_goals_states_normalized, num_agents, horizons, traj_index = (
+        _resolve_projection_layout(x, projection_info, hard_conds)
+    )
 
     # unnormalize the x
     agents_starts_states = projection_info.unnormalize_trajectories(agents_starts_states_normalized)
@@ -274,10 +281,6 @@ def apply_projection_alm(x, projection_info, hard_conds, first_projection, init_
 
 
     num_obs = obs_rads.shape[0]
-
-    horizons = 64
-    traj_index = np.arange(64)
-
 
     agents_max_speeds = proj_params["agents_max_speeds"]
 
@@ -395,4 +398,3 @@ def apply_projection_alm(x, projection_info, hard_conds, first_projection, init_
 
 
     return x, success
-

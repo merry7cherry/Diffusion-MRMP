@@ -33,6 +33,17 @@ def check_paths_ok(paths, obs_data, robot_radius: float = 0.05, threshold: float
     return True
 
 
+def infer_num_agents(path_file: Path, map_info: dict, paths_data: np.ndarray) -> int:
+    if "num_agents" in map_info:
+        return int(map_info["num_agents"])
+    for part in path_file.parts:
+        if part.startswith("num_agents___"):
+            return int(part.split("___", 1)[1])
+    if paths_data.shape[-1] % 2 != 0:
+        raise ValueError(f"Cannot infer num_agents from paths with shape {paths_data.shape}")
+    return int(paths_data.shape[-1] // 2)
+
+
 def evaluate_results(results_dir: str | Path) -> dict[str, float]:
     runtime = runtime_from_env()
     result_paths = sorted(Path(results_dir).rglob("paths.npy"))
@@ -45,8 +56,14 @@ def evaluate_results(results_dir: str | Path) -> dict[str, float]:
         obs_data = map_data[0]
 
         paths_data = np.load(path_file)
-        num_agents = int(map_info["num_agents"])
-        path_data = paths_data[0, :, : num_agents * 2].reshape(paths_data.shape[1], num_agents, 2).swapaxes(0, 1)
+        num_agents = infer_num_agents(path_file, map_info, paths_data)
+        if paths_data.ndim == 3:
+            path_batch = paths_data[0]
+        elif paths_data.ndim == 2:
+            path_batch = paths_data
+        else:
+            raise ValueError(f"Unsupported paths shape {paths_data.shape}")
+        path_data = path_batch[:, : num_agents * 2].reshape(path_batch.shape[0], num_agents, 2).swapaxes(0, 1)
         if check_paths_ok(path_data, obs_data):
             success_count += 1
 

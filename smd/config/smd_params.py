@@ -58,6 +58,8 @@ class SMDParams:
     # Torch.
     tensor_args = {'device': device, 'dtype': torch.float32}
 
-    # Trained models directory.
-    trained_models_dir_global_fpath = '~/smd/data_trained_models'  # Modify this.
+    @staticmethod
+    def trained_models_dir_global_fpath() -> str:
+        from smd.runtime import runtime_from_env
 
+        return str(runtime_from_env().trained_models_root)

@@ -43,3 +43,25 @@ def test_expand_runtime_path_resolves_placeholders_and_relative_paths(
         runtime=runtime,
         source_path=config_path,
     ) == (config_dir.parent / "artifacts" / "checkpoint.pt").resolve()
+
+
+def test_expand_runtime_path_preserves_canonical_absolute_runtime_roots(monkeypatch) -> None:
+    from pathlib import Path as RuntimePath
+
+    from smd.runtime import RuntimePaths, expand_runtime_path
+
+    monkeypatch.setenv("USER", "tester")
+    runtime = RuntimePaths.from_project_name("demo-project")
+    original_resolve = RuntimePath.resolve
+
+    def guarded_resolve(self: RuntimePath, *args, **kwargs):
+        if str(self).startswith("/scratch/tester/demo-project"):
+            raise AssertionError("resolve() should not rewrite canonical UVA runtime roots")
+        return original_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(RuntimePath, "resolve", guarded_resolve)
+
+    assert expand_runtime_path(
+        "{runs_root}/outputs/model_a",
+        runtime=runtime,
+    ) == Path("/scratch/tester/demo-project/runs/outputs/model_a")

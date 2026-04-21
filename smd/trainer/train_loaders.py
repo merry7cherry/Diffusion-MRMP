@@ -56,6 +56,12 @@ def get_loss(loss_class=None, **kwargs):
     return loss_fn
 
 
+def merge_dataset_loader_kwargs(args=None, **overrides):
+    dataset_kwargs = dict(args or {})
+    dataset_kwargs.update(overrides)
+    return dataset_kwargs
+
+
 def get_dataset(dataset_class=None,
                 dataset_subdir=None,
                 batch_size=2,
@@ -87,4 +93,3 @@ def get_summary(summary_class=None, **kwargs):
     SummaryClass = getattr(summaries, summary_class)
     summary_fn = SummaryClass(**kwargs).summary_fn
     return summary_fn
-

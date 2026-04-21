@@ -31,10 +31,14 @@ from experiment_launcher.utils import fix_random_seed
 from smd.common.experiments import TrialSuccessStatus
 from smd.common.constraints import MultiPointConstraint
 from smd.common.multi_agent_utils import *
-from mp_baselines.planners.costs.cost_functions import CostCollision, CostComposite, CostGPTrajectory
+from mp_baselines.planners.costs.cost_functions import (
+    CostCollision,
+    CostComposite,
+    CostGPTrajectoryPositionOnlyWrapper,
+)
 from smd.models.model_io import load_dfm_model_from_model_dir, load_dfm_training_args
 from smd.models.diffusion_models.guides import GuideManagerTrajectoriesWithVelocity
-from smd.trainer import get_dataset
+from smd.trainer import get_dataset, merge_dataset_loader_kwargs
 from smd.runtime import runtime_from_env
 from torch_robotics.robots import *
 from torch_robotics.torch_utils.seed import fix_random_seed
@@ -117,16 +121,16 @@ class SMDComposite:
 
         ####################################
         # Load dataset with env, robot, and task.   
-        train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(
+        dataset_kwargs = merge_dataset_loader_kwargs(
+            args,
             dataset_class='TrajectoryDataset',
             use_extra_objects=True,
             obstacle_cutoff_margin=0.01,
-            # Important for having the self-collision cost affect robots that are not directly overlapping too.
-            **args,
             tensor_args=tensor_args,
-            instance_idx = kwargs['instance_idx'],
-            map_name = kwargs['map_name'],            
+            instance_idx=kwargs['instance_idx'],
+            map_name=kwargs['map_name'],
         )
+        train_subset, train_dataloader, val_subset, val_dataloader = get_dataset(**dataset_kwargs)
         self.dataset = train_subset.dataset
         self.n_support_points = self.dataset.n_support_points
         env = self.dataset.env
@@ -180,7 +184,7 @@ class SMDComposite:
 
         # Cost smoothness.
         cost_smoothness_l = [
-            CostGPTrajectory(
+            CostGPTrajectoryPositionOnlyWrapper(
                 self.robot, self.n_support_points, dt, sigma_gp=1.0,
                 tensor_args=tensor_args
             )
